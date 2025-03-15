@@ -1,5 +1,5 @@
 install:
-	uv sync
+	uv uv pip install -r requirements.txt
 
 build:
 	./build.sh
