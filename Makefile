@@ -1,18 +1,18 @@
 install:
-	uv sync
+		uv sync
 
 lint:
-	uv run flake8 page_analyzer
+		uv run flake8 page_analyzer
 
 dev:
-	uv run flask --debug --app page_analyzer:app run
+		uv run flask --debug --app page_analyzer:app run
 
 PORT ?= 8000
 start:
-	uv run gunicorn -w 5 -b 0.0.0.0:$(PORT) page_analyzer:app
+		uv run gunicorn -w 5 -b 0.0.0.0:$(PORT) page_analyzer:app
 
 render-start:
-	gunicorn -w 5 -b 0.0.0.0:$(PORT) page_analyzer:app
+		gunicorn -w 5 -b 0.0.0.0:$(PORT) page_analyzer:app
 
 build:
-	./build.sh
+		./build.sh
