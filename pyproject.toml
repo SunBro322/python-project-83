@@ -3,7 +3,7 @@ name = "hexlet-code"
 version = "0.1.0"
 description = "Analyzes specified pages for SEO suitability"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.10"
 dependencies = [
     "flake8>=7.1.2",
     "flask>=3.1.0",
