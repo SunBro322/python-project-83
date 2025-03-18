@@ -4,5 +4,10 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    ''' Show main page '''
+    """ Show main page """
     return render_template('main.html')
+
+@app.route('/urls')
+def url():
+    """ Show urls """
+    pass
