@@ -8,6 +8,6 @@ def home():
     return render_template('main.html')
 
 @app.route('/urls')
-def url():
+def urls():
     """ Show urls """
-    pass
+    return render_template('main.html')
