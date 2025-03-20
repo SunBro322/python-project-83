@@ -1,4 +1,5 @@
 from flask import Flask, render_template
+from validator import validator
 
 app = Flask(__name__)
 
@@ -11,3 +12,6 @@ def home():
 def urls():
     """ Show urls """
     return render_template('main.html')
+
+def add_urls():
+    pass
