@@ -9,4 +9,5 @@ dependencies = [
     "flask>=3.1.0",
     "gunicorn>=23.0.0",
     "psycopg2>=2.9.10",
+    "validators>=0.34.0",
 ]
