@@ -2,3 +2,5 @@
 /.python-version
 /.idea
 /info
+.env
+/logs
