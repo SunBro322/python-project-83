@@ -1,8 +1,7 @@
 import os
 from flask import Flask, render_template, request, flash, url_for, redirect
-from unicodedata import normalize
 
-from .database import get_db_connection, close_db_connection
+from .database import connect_db, close_db_connection
 from validators import url as validate_url
 from urllib.parse import urlparse
 from dotenv import load_dotenv
@@ -16,6 +15,7 @@ load_dotenv()
 logger = logger(__name__)
 
 app = Flask(__name__)
+app.config['DATABASE_URL'] = os.getenv('DATABASE_URL')
 app.secret_key = os.getenv('SECRET_KEY')
 
 @app.errorhandler(404)
@@ -33,16 +33,13 @@ def index():
     logger.info("Обработка главной страницы")
     return render_template('index.html')
 
+
 @app.route('/urls/<int:id>')
 def url_detail(id):
     """Show details of a specific URL"""
     logger.info("url_detail")
-    conn = get_db_connection()
-    if not conn:
-        flash('Ошибка подключения к базе данных', 'danger')
-        return redirect(url_for('index'))
-
     try:
+        conn = connect_db(app)  # Использование новой функции
         with conn.cursor() as cur:
             # Получаем данные URL
             cur.execute('SELECT * FROM urls WHERE id = %s', (id,))
@@ -60,47 +57,29 @@ def url_detail(id):
             ''', (id,))
             checks = cur.fetchall()
 
-        # Преобразуем в словарь для удобства шаблона
-        url_data = {
-            'id': url[0],
-            'name': url[1],
-            'created_at': url[2]
-        }
+        # Преобразуем в словарь
+        url_data = {'id': url[0], 'name': url[1], 'created_at': url[2]}
         checks_data = [
-            {
-                'id': check[0],
-                'status_code': check[1],
-                'h1': check[2],
-                'title': check[3],
-                'description': check[4],
-                'created_at': check[5]
-            } for check in checks
+            {'id': c[0], 'status_code': c[1], 'h1': c[2],
+             'title': c[3], 'description': c[4], 'created_at': c[5]}
+            for c in checks
         ]
 
-        return render_template(
-            'show_one_url.html',
-            url=url_data,
-            checks=checks_data
-        )
+        return render_template('show_one_url.html', url=url_data, checks=checks_data)
 
     except psycopg2.Error as e:
         flash(f'Ошибка базы данных: {e}', 'danger')
-        logger.info("Ошибка базы данных")
+        logger.error(f"DB error: {e}")
         return redirect(url_for('index'))
-
     finally:
-        close_db_connection(conn)
+        if 'conn' in locals():
+            close_db_connection(conn)  # Закрытие соединения
 
 @app.route('/urls')
 def all_urls():
-    logger.info("Показать всех пользователей all_urls")
     """Show all URLs"""
-    conn = get_db_connection()
-    if not conn:
-        flash('Ошибка подключения к базе данных', 'danger')
-        return redirect(url_for('index'))
-
     try:
+        conn = connect_db(app)  # Использование новой функции
         with conn.cursor() as cur:
             cur.execute('''
                 SELECT urls.id, urls.name, 
@@ -114,12 +93,9 @@ def all_urls():
             urls = cur.fetchall()
 
         urls_data = [
-            {
-                'id': url[0],
-                'name': url[1],
-                'last_check': url[2],
-                'status_code': url[3]
-            } for url in urls
+            {'id': u[0], 'name': u[1],
+             'last_check': u[2], 'status_code': u[3]}
+            for u in urls
         ]
 
         return render_template('urls.html', urls=urls_data)
@@ -127,36 +103,37 @@ def all_urls():
     except psycopg2.Error as e:
         flash(f'Ошибка базы данных: {e}', 'danger')
         return redirect(url_for('index'))
-
     finally:
-        close_db_connection(conn)
-
+        if 'conn' in locals():
+            close_db_connection(conn)
 
 @app.route('/urls', methods=['POST'])
 def add_url():
-    """ Check and add url """
+    """Check and add url"""
     input_url = request.form.get('url')
     errors = []
 
+    # Валидация URL
     if not input_url:
         errors.append('URL обязателен для заполнения')
     elif not validate_url(input_url):
         errors.append('Некорректный URL')
+    elif len(input_url) > 255:
+        errors.append('URL превышает 255 символов')
 
     if errors:
         flash(errors[0], 'danger')
         return render_template('index.html', errors=errors), 422
 
+    # Нормализация URL
     parsed_url = urlparse(input_url)
     normalized_url = f"{parsed_url.scheme}://{parsed_url.netloc}".lower()
 
-    conn = get_db_connection()
-    if not conn:
-        flash('Ошибка подключения к базе данных', 'danger')
-        return render_template('index.html'), 500
-
+    conn = None
     try:
-        with (conn.cursor() as cur):
+        conn = connect_db(app)
+        with conn.cursor() as cur:
+            # Проверка существующего URL
             cur.execute('SELECT id FROM urls WHERE name = %s', (normalized_url,))
             existing_url = cur.fetchone()
 
@@ -164,22 +141,24 @@ def add_url():
                 flash('Страница уже существует', 'info')
                 return redirect(url_for('url_detail', id=existing_url[0]))
 
+            # Вставка нового URL
             created_at = datetime.datetime.now()
-            cur.execute("INSERT INTO urls (name, created_at) "
-                        "VALUES (%s, %s) RETURNING id", (normalized_url, created_at))
-            url_id = cur.fetchone()[0]
+            cur.execute(
+                "INSERT INTO urls (name, created_at) VALUES (%s, %s) RETURNING id",
+                (normalized_url, created_at)
+            )
+            url_id = cur.fetchone()[0]  # Получаем ID новой записи
             conn.commit()
 
-            logger.info("Страница успешно добавлена")
             flash('Страница успешно добавлена', 'success')
-            return redirect(url_for('url_detail', id=url_id))
+            return redirect(url_for('url_detail', id=url_id))  # Перенаправление
 
     except psycopg2.Error as e:
-        conn.rollback()
+        if conn:
+            conn.rollback()
         flash(f'Ошибка базы данных: {e}', 'danger')
         return render_template('index.html'), 500
 
     finally:
-        close_db_connection(conn)
-
-
+        if conn:
+            close_db_connection(conn)

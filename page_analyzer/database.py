@@ -1,24 +1,15 @@
 import psycopg2
-import os
-from dotenv import load_dotenv
 
-load_dotenv()
-
-def get_db_connection():
-    """ connection to DB """
+def connect_db(app):
+    """Создание подключения к БД через конфиг приложения"""
     try:
-        conn = psycopg2.connect(
-            host=os.getenv('DB_HOST'),
-            port=os.getenv('DB_PORT'),
-            database=os.getenv('DB_NAME'),
-            user=os.getenv('DB_USER'),
-            password=os.getenv('DB_PASSWORD')
-        )
+        conn = psycopg2.connect(app.config['DATABASE_URL'])
         return conn
     except psycopg2.OperationalError as error:
-        print(f"Error connecting to database: {error}")
-        return None
+        app.logger.error(f"Database connection error: {error}")
+        raise
 
 def close_db_connection(conn):
+    """Закрытие подключения к БД"""
     if conn is not None:
         conn.close()
