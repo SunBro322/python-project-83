@@ -33,6 +33,104 @@ def index():
     logger.info("Обработка главной страницы")
     return render_template('index.html')
 
+@app.route('/urls/<int:id>')
+def url_detail(id):
+    """Show details of a specific URL"""
+    logger.info("url_detail")
+    conn = get_db_connection()
+    if not conn:
+        flash('Ошибка подключения к базе данных', 'danger')
+        return redirect(url_for('index'))
+
+    try:
+        with conn.cursor() as cur:
+            # Получаем данные URL
+            cur.execute('SELECT * FROM urls WHERE id = %s', (id,))
+            url = cur.fetchone()
+            if not url:
+                flash('Страница не найдена', 'danger')
+                return redirect(url_for('index'))
+
+            # Получаем проверки URL
+            cur.execute('''
+                SELECT id, status_code, h1, title, description, created_at 
+                FROM url_checks 
+                WHERE url_id = %s 
+                ORDER BY id DESC
+            ''', (id,))
+            checks = cur.fetchall()
+
+        # Преобразуем в словарь для удобства шаблона
+        url_data = {
+            'id': url[0],
+            'name': url[1],
+            'created_at': url[2]
+        }
+        checks_data = [
+            {
+                'id': check[0],
+                'status_code': check[1],
+                'h1': check[2],
+                'title': check[3],
+                'description': check[4],
+                'created_at': check[5]
+            } for check in checks
+        ]
+
+        return render_template(
+            'show_one_url.html',
+            url=url_data,
+            checks=checks_data
+        )
+
+    except psycopg2.Error as e:
+        flash(f'Ошибка базы данных: {e}', 'danger')
+        logger.info("Ошибка базы данных")
+        return redirect(url_for('index'))
+
+    finally:
+        close_db_connection(conn)
+
+@app.route('/urls')
+def all_urls():
+    logger.info("Показать всех пользователей all_urls")
+    """Show all URLs"""
+    conn = get_db_connection()
+    if not conn:
+        flash('Ошибка подключения к базе данных', 'danger')
+        return redirect(url_for('index'))
+
+    try:
+        with conn.cursor() as cur:
+            cur.execute('''
+                SELECT urls.id, urls.name, 
+                    MAX(url_checks.created_at) AS last_check,
+                    MAX(url_checks.status_code) AS status_code
+                FROM urls
+                LEFT JOIN url_checks ON urls.id = url_checks.url_id
+                GROUP BY urls.id
+                ORDER BY urls.created_at DESC
+            ''')
+            urls = cur.fetchall()
+
+        urls_data = [
+            {
+                'id': url[0],
+                'name': url[1],
+                'last_check': url[2],
+                'status_code': url[3]
+            } for url in urls
+        ]
+
+        return render_template('urls.html', urls=urls_data)
+
+    except psycopg2.Error as e:
+        flash(f'Ошибка базы данных: {e}', 'danger')
+        return redirect(url_for('index'))
+
+    finally:
+        close_db_connection(conn)
+
 
 @app.route('/urls', methods=['POST'])
 def add_url():
