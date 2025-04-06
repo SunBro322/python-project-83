@@ -13,3 +13,5 @@ CREATE TABLE url_checks (
     description TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+

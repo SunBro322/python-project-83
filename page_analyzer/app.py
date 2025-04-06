@@ -29,14 +29,14 @@ def server_error(error):
 
 @app.route('/')
 def index():
-    """ Show main page """
+    """ Отображение главной страницы """
     logger.info("Обработка главной страницы")
     return render_template('index.html')
 
 
 @app.route('/urls/<int:id>')
 def url_detail(id):
-    """Show details of a specific URL"""
+    """ Показать детальную информациб по URL """
     logger.info("url_detail")
     try:
         conn = connect_db(app)  # Использование новой функции
@@ -77,12 +77,15 @@ def url_detail(id):
 
 @app.route('/urls')
 def all_urls():
-    """Show all URLs"""
+    """ Показать все URLS """
     try:
-        conn = connect_db(app)  # Использование новой функции
+        conn = connect_db(app)
         with conn.cursor() as cur:
+            # Запрос с датой последней проверки
             cur.execute('''
-                SELECT urls.id, urls.name, 
+                SELECT 
+                    urls.id, 
+                    urls.name, 
                     MAX(url_checks.created_at) AS last_check,
                     MAX(url_checks.status_code) AS status_code
                 FROM urls
@@ -109,7 +112,7 @@ def all_urls():
 
 @app.route('/urls', methods=['POST'])
 def add_url():
-    """Check and add url"""
+    """ Проверка и добавление URL """
     input_url = request.form.get('url')
     errors = []
 
@@ -162,3 +165,26 @@ def add_url():
     finally:
         if conn:
             close_db_connection(conn)
+
+@app.route('/urls/<int:id>/checks', methods=['POST'])
+def check_url(id):
+    """ Проверка URLs """
+    try:
+        conn = connect_db(app)
+        created_at = datetime.datetime.now()
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO url_checks (url_id, created_at) VALUES (%s, %s)",
+                (id, created_at)
+            )
+            conn.commit()
+            flash('Страница успешно проверена', 'success')
+    except psycopg2.Error as e:
+        if conn:
+            conn.rollback()
+        flash(f'Ошибка базы данных: {e}', 'danger')
+        logger.error(f"Ошибка проверки: {e}")
+    finally:
+        if 'conn' in locals():
+            close_db_connection(conn)
+    return redirect(url_for('url_detail', id=id))
