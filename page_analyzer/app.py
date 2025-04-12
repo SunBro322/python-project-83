@@ -1,4 +1,5 @@
 import os
+import requests
 from flask import Flask, render_template, request, flash, url_for, redirect
 
 from .database import connect_db, close_db_connection
@@ -87,7 +88,9 @@ def all_urls():
                     urls.id, 
                     urls.name, 
                     MAX(url_checks.created_at) AS last_check,
-                    MAX(url_checks.status_code) AS status_code
+                    (SELECT status_code FROM url_checks 
+                     WHERE url_id = urls.id 
+                     ORDER BY created_at DESC LIMIT 1) AS status_code
                 FROM urls
                 LEFT JOIN url_checks ON urls.id = url_checks.url_id
                 GROUP BY urls.id
@@ -168,23 +171,40 @@ def add_url():
 
 @app.route('/urls/<int:id>/checks', methods=['POST'])
 def check_url(id):
-    """ Проверка URLs """
+    """Проверка URL с извлечением статусного кода"""
+    conn = None
     try:
         conn = connect_db(app)
         created_at = datetime.datetime.now()
+
+        # Получаем URL из базы
+        with conn.cursor() as cur:
+            cur.execute('SELECT name FROM urls WHERE id = %s', (id,))
+            url_name = cur.fetchone()[0]
+
+        # Выполняем запрос к сайту
+        response = requests.get(url_name, timeout=5)
+        response.raise_for_status()  # Проверка на ошибки HTTP
+        status_code = response.status_code
+
+        # Сохраняем проверку с кодом ответа
         with conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO url_checks (url_id, created_at) VALUES (%s, %s)",
-                (id, created_at)
+                '''INSERT INTO url_checks 
+                (url_id, status_code, created_at) 
+                VALUES (%s, %s, %s)''',
+                (id, status_code, created_at)
             )
             conn.commit()
             flash('Страница успешно проверена', 'success')
-    except psycopg2.Error as e:
+
+    except (psycopg2.Error, requests.RequestException) as e:
         if conn:
             conn.rollback()
-        flash(f'Ошибка базы данных: {e}', 'danger')
+        flash('Произошла ошибка при проверке', 'danger')
         logger.error(f"Ошибка проверки: {e}")
     finally:
-        if 'conn' in locals():
+        if conn:
             close_db_connection(conn)
+
     return redirect(url_for('url_detail', id=id))
