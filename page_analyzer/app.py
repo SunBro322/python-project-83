@@ -20,6 +20,7 @@ app = Flask(__name__)
 app.config['DATABASE_URL'] = os.getenv('DATABASE_URL')
 app.secret_key = os.getenv('SECRET_KEY')
 
+
 @app.errorhandler(404)
 def page_not_found(error):
     return render_template("errors/404.html"), 404
@@ -28,6 +29,7 @@ def page_not_found(error):
 @app.errorhandler(500)
 def server_error(error):
     return render_template("errors/500.html"), 500
+
 
 @app.route('/')
 def index():
@@ -49,16 +51,14 @@ def url_detail(id):
             if not url:
                 flash('Страница не найдена', 'danger')
                 return redirect(url_for('index'))
-
             # Получаем проверки URL
             cur.execute('''
-                SELECT id, status_code, h1, title, description, created_at 
-                FROM url_checks 
-                WHERE url_id = %s 
+                SELECT id, status_code, h1, title, description, created_at
+                FROM url_checks
+                WHERE url_id = %s
                 ORDER BY id DESC
-            ''', (id,))
+                ''', (id,))
             checks = cur.fetchall()
-
         # Преобразуем в словарь
         url_data = {'id': url[0], 'name': url[1], 'created_at': url[2]}
         checks_data = [
@@ -66,8 +66,9 @@ def url_detail(id):
              'title': c[3], 'description': c[4], 'created_at': c[5]}
             for c in checks
         ]
-
-        return render_template('show_one_url.html', url=url_data, checks=checks_data)
+        return render_template('show_one_url.html',
+                               url=url_data,
+                               checks=checks_data)
 
     except psycopg2.Error as e:
         flash(f'Ошибка базы данных: {e}', 'danger')
@@ -77,6 +78,7 @@ def url_detail(id):
         if 'conn' in locals():
             close_db_connection(conn)  # Закрытие соединения
 
+
 @app.route('/urls')
 def all_urls():
     """ Показать все URLS """
@@ -85,12 +87,12 @@ def all_urls():
         with conn.cursor() as cur:
             # Запрос с датой последней проверки
             cur.execute('''
-                SELECT 
-                    urls.id, 
-                    urls.name, 
+                SELECT
+                    urls.id,
+                    urls.name,
                     MAX(url_checks.created_at) AS last_check,
-                    (SELECT status_code FROM url_checks 
-                     WHERE url_id = urls.id 
+                    (SELECT status_code FROM url_checks
+                     WHERE url_id = urls.id
                      ORDER BY created_at DESC LIMIT 1) AS status_code
                 FROM urls
                 LEFT JOIN url_checks ON urls.id = url_checks.url_id
@@ -113,6 +115,7 @@ def all_urls():
     finally:
         if 'conn' in locals():
             close_db_connection(conn)
+
 
 @app.route('/urls', methods=['POST'])
 def add_url():
@@ -141,7 +144,8 @@ def add_url():
         conn = connect_db(app)
         with conn.cursor() as cur:
             # Проверка существующего URL
-            cur.execute('SELECT id FROM urls WHERE name = %s', (normalized_url,))
+            cur.execute('SELECT id FROM urls WHERE name = %s',
+                        (normalized_url,))
             existing_url = cur.fetchone()
 
             if existing_url:
@@ -151,14 +155,17 @@ def add_url():
             # Вставка нового URL
             created_at = datetime.datetime.now()
             cur.execute(
-                "INSERT INTO urls (name, created_at) VALUES (%s, %s) RETURNING id",
+                "INSERT INTO urls (name, created_at) "
+                "VALUES (%s, %s) RETURNING id",
                 (normalized_url, created_at)
             )
             url_id = cur.fetchone()[0]  # Получаем ID новой записи
             conn.commit()
 
-            flash('Страница успешно добавлена', 'success')
-            return redirect(url_for('url_detail', id=url_id))  # Перенаправление
+            flash('Страница успешно добавлена',
+                  'success')
+            return redirect(url_for('url_detail',
+                                    id=url_id))  # Перенаправление
 
     except psycopg2.Error as e:
         if conn:
@@ -195,12 +202,13 @@ def check_url(id):
         h1 = soup.find('h1').text.strip() if soup.find('h1') else ''
         title = soup.find('title').text.strip() if soup.find('title') else ''
         meta_description = soup.find('meta', attrs={'name': 'description'})
-        description = meta_description['content'].strip() if meta_description else ''
+        description = meta_description['content'].strip() \
+            if meta_description else ''
 
         # Сохраняем проверку
         with conn.cursor() as cur:
             cur.execute('''
-                INSERT INTO url_checks 
+                INSERT INTO url_checks
                 (url_id, status_code, h1, title, description, created_at)
                 VALUES (%s, %s, %s, %s, %s, %s)
             ''', (

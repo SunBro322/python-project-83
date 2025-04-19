@@ -16,3 +16,4 @@ render-start:
 
 build:
 		./build.sh
+
