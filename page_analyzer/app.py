@@ -1,6 +1,7 @@
 import os
 import requests
 from flask import Flask, render_template, request, flash, url_for, redirect
+from bs4 import BeautifulSoup
 
 from .database import connect_db, close_db_connection
 from validators import url as validate_url
@@ -169,9 +170,10 @@ def add_url():
         if conn:
             close_db_connection(conn)
 
+
 @app.route('/urls/<int:id>/checks', methods=['POST'])
 def check_url(id):
-    """Проверка URL с извлечением статусного кода"""
+    """Проверка URL с извлечением SEO-данных"""
     conn = None
     try:
         conn = connect_db(app)
@@ -184,21 +186,35 @@ def check_url(id):
 
         # Выполняем запрос к сайту
         response = requests.get(url_name, timeout=5)
-        response.raise_for_status()  # Проверка на ошибки HTTP
-        status_code = response.status_code
+        response.raise_for_status()
 
-        # Сохраняем проверку с кодом ответа
+        # Парсим HTML
+        soup = BeautifulSoup(response.text, 'html.parser')
+
+        # Извлекаем данные
+        h1 = soup.find('h1').text.strip() if soup.find('h1') else ''
+        title = soup.find('title').text.strip() if soup.find('title') else ''
+        meta_description = soup.find('meta', attrs={'name': 'description'})
+        description = meta_description['content'].strip() if meta_description else ''
+
+        # Сохраняем проверку
         with conn.cursor() as cur:
-            cur.execute(
-                '''INSERT INTO url_checks 
-                (url_id, status_code, created_at) 
-                VALUES (%s, %s, %s)''',
-                (id, status_code, created_at)
-            )
+            cur.execute('''
+                INSERT INTO url_checks 
+                (url_id, status_code, h1, title, description, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            ''', (
+                id,
+                response.status_code,
+                h1[:255],  # Ограничение длины как в БД
+                title[:255],
+                description[:255],
+                created_at
+            ))
             conn.commit()
             flash('Страница успешно проверена', 'success')
 
-    except (psycopg2.Error, requests.RequestException) as e:
+    except (psycopg2.Error, requests.RequestException, KeyError) as e:
         if conn:
             conn.rollback()
         flash('Произошла ошибка при проверке', 'danger')
