@@ -85,15 +85,17 @@ def all_urls():
     try:
         conn = connect_db(app)
         with conn.cursor() as cur:
-            # Запрос с датой последней проверки и статусом
             cur.execute('''
                 SELECT
                     urls.id,
-                    urls.name,
-                    MAX(url_checks.created_at) AS last_check,
-                    (SELECT status_code FROM url_checks
-                     WHERE url_id = urls.id
-                     ORDER BY created_at DESC LIMIT 1) AS status_code
+                    urls.name
+                    COALESCE(MAX(url_checks.created_at), '') AS last_check,
+                    COALESCE(
+                        (SELECT status_code FROM url_checks
+                         WHERE url_id = urls.id
+                         ORDER BY created_at DESC LIMIT 1
+                        ), ''
+                    ) AS status_code
                 FROM urls
                 LEFT JOIN url_checks ON urls.id = url_checks.url_id
                 GROUP BY urls.id
@@ -102,12 +104,7 @@ def all_urls():
             urls = cur.fetchall()
 
         urls_data = [
-            {
-                'id': u[0],
-                'name': u[1],
-                'last_check': u[2],
-                'status_code': u[3] if u[3] else None
-            }
+            {'id': u[0], 'name': u[1], 'last_check': u[2], 'status_code': u[3]}
             for u in urls
         ]
 
@@ -197,17 +194,20 @@ def check_url(id):
 
         # Выполняем запрос к сайту
         response = requests.get(url_name, timeout=5)
-        response.raise_for_status()
+        status_code = response.status_code
 
-        # Парсим HTML
-        soup = BeautifulSoup(response.text, 'html.parser')
-
-        # Извлекаем данные
-        h1 = soup.find('h1').text.strip() if soup.find('h1') else ''
-        title = soup.find('title').text.strip() if soup.find('title') else ''
-        meta_description = soup.find('meta', attrs={'name': 'description'})
-        description = meta_description['content'].strip() \
-            if meta_description else ''
+        # Парсим HTML (только если статус 200)
+        h1 = ''
+        title = ''
+        description = ''
+        if status_code == 200:
+            soup = BeautifulSoup(response.text, 'html.parser')
+            h1 = soup.find('h1').text.strip() if soup.find('h1') else ''
+            title = soup.find('title').text.strip() \
+                if soup.find('title') else ''
+            meta_description = soup.find('meta', attrs={'name': 'description'})
+            description = meta_description['content'].strip() \
+                if meta_description else ''
 
         # Сохраняем проверку
         with conn.cursor() as cur:
@@ -217,14 +217,14 @@ def check_url(id):
                 VALUES (%s, %s, %s, %s, %s, %s)
             ''', (
                 id,
-                response.status_code,
+                status_code,  # Сохраняем любой статус (200, 404, 500 и т.д.)
                 h1[:255],
                 title[:255],
                 description[:255],
                 created_at
             ))
             conn.commit()
-            flash('Страница успешно проверена', 'success')
+            flash('Проверка завершена', 'success')
 
     except (psycopg2.Error, requests.RequestException, KeyError) as e:
         if conn:
