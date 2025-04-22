@@ -89,12 +89,10 @@ def all_urls():
                 SELECT
                     urls.id,
                     urls.name,
-                    COALESCE(MAX(url_checks.created_at), '') AS last_check,
-                    COALESCE(
-                        (SELECT status_code FROM url_checks
-                         WHERE url_id = urls.id
-                         ORDER BY created_at DESC LIMIT 1
-                        ), ''
+                    MAX(url_checks.created_at) AS last_check,
+                    (SELECT status_code FROM url_checks
+                     WHERE url_id = urls.id
+                     ORDER BY created_at DESC LIMIT 1
                     ) AS status_code
                 FROM urls
                 LEFT JOIN url_checks ON urls.id = url_checks.url_id
@@ -104,7 +102,12 @@ def all_urls():
             urls = cur.fetchall()
 
         urls_data = [
-            {'id': u[0], 'name': u[1], 'last_check': u[2], 'status_code': u[3]}
+            {
+                'id': u[0],
+                'name': u[1],
+                'last_check': u[2] if u[2] else None,
+                'status_code': u[3] if u[3] is not None else ''
+            }
             for u in urls
         ]
 
