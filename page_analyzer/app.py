@@ -85,7 +85,7 @@ def all_urls():
     try:
         conn = connect_db(app)
         with conn.cursor() as cur:
-            # Запрос с датой последней проверки
+            # Запрос с датой последней проверки и статусом
             cur.execute('''
                 SELECT
                     urls.id,
@@ -102,8 +102,12 @@ def all_urls():
             urls = cur.fetchall()
 
         urls_data = [
-            {'id': u[0], 'name': u[1],
-             'last_check': u[2], 'status_code': u[3]}
+            {
+                'id': u[0],
+                'name': u[1],
+                'last_check': u[2],
+                'status_code': u[3] if u[3] else None
+            }
             for u in urls
         ]
 
@@ -214,7 +218,7 @@ def check_url(id):
             ''', (
                 id,
                 response.status_code,
-                h1[:255],  # Ограничение длины как в БД
+                h1[:255],
                 title[:255],
                 description[:255],
                 created_at

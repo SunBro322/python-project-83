@@ -17,9 +17,8 @@
             <tr>
                 <td>{{ url.id }}</td>
                 <td><a href="{{ url_for('url_detail', id=url.id) }}">{{ url.name }}</a></td>
-                <td>{{ url.last_check if url.last_check else '' }}</td>
-                <td>{{ url.status_code if url.status_code else '' }}</td>
                 <td>{{ url.last_check.strftime('%Y-%m-%d') if url.last_check else '' }}</td>
+                <td>{{ url.status_code if url.status_code else '' }}</td>
             </tr>
             {% endfor %}
         </tbody>
