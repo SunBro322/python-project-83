@@ -88,7 +88,7 @@ def all_urls():
             cur.execute('''
                 SELECT
                     urls.id,
-                    urls.name
+                    urls.name,
                     COALESCE(MAX(url_checks.created_at), '') AS last_check,
                     COALESCE(
                         (SELECT status_code FROM url_checks
