@@ -137,7 +137,8 @@ def add_url():
 
     # Нормализация URL
     parsed_url = urlparse(input_url)
-    normalized_url = f"{parsed_url.scheme}://{parsed_url.netloc}".lower().rstrip('/')
+    normalized_url = (f"{parsed_url.scheme}://"
+                      f"{parsed_url.netloc}").lower().rstrip('/')
 
     conn = None
     try:
@@ -185,13 +186,12 @@ def check_url(id):
         conn = connect_db(app)
         created_at = datetime.datetime.now()
 
-        # Получаем URL из базы
         with conn.cursor() as cur:
             cur.execute('SELECT name FROM urls WHERE id = %s', (id,))
             url_name = cur.fetchone()[0]
 
-        # Выполняем запрос к сайту
-        response = requests.get(url_name, timeout=5)
+        response = requests.get(url_name, timeout=10)
+        response.raise_for_status()
         status_code = response.status_code
 
         h1 = ''
@@ -213,7 +213,7 @@ def check_url(id):
                 VALUES (%s, %s, %s, %s, %s, %s)
             ''', (
                 id,
-                status_code,  # Сохраняем любой статус (200, 404, 500 и т.д.)
+                status_code,
                 h1[:255],
                 title[:255],
                 description[:255],
@@ -222,12 +222,16 @@ def check_url(id):
             conn.commit()
             flash('Страница успешно проверена', 'success')
 
-
+    except requests.exceptions.RequestException as e:
+        if conn:
+            conn.rollback()
+        flash('Произошла ошибка при проверке', 'danger')
+        logger.error(f"Ошибка сети: {e}")
     except Exception as e:
         if conn:
             conn.rollback()
         flash('Произошла ошибка при проверке', 'danger')
-        logger.error(f"Ошибка проверки: {e}")
+        logger.error(f"Общая ошибка: {e}")
     finally:
         if conn:
             close_db_connection(conn)

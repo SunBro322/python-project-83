@@ -1,10 +1,13 @@
 {% extends 'layout.html' %}
 
 {% block sidebar %}
-    {% with flashed_messages = get_flashed_messages(with_categories=True) %}
-        {% if flashed_messages %}
-            {% for category, message in flashed_messages %}
-                <div class="alert alert-{{ category }}" role="alert">{{ message }}</div>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
             {% endfor %}
         {% endif %}
     {% endwith %}
