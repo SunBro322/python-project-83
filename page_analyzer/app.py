@@ -86,18 +86,14 @@ def all_urls():
         conn = connect_db(app)
         with conn.cursor() as cur:
             cur.execute('''
-                SELECT
+                SELECT DISTINCT ON (urls.id)
                     urls.id,
                     urls.name,
-                    MAX(url_checks.created_at) AS last_check,
-                    (SELECT status_code FROM url_checks
-                     WHERE url_id = urls.id
-                     ORDER BY created_at DESC LIMIT 1
-                    ) AS status_code
+                    url_checks.created_at AS last_check,
+                    url_checks.status_code
                 FROM urls
                 LEFT JOIN url_checks ON urls.id = url_checks.url_id
-                GROUP BY urls.id
-                ORDER BY urls.created_at DESC
+                ORDER BY urls.id DESC, url_checks.created_at DESC
             ''')
             urls = cur.fetchall()
 
@@ -141,7 +137,7 @@ def add_url():
 
     # Нормализация URL
     parsed_url = urlparse(input_url)
-    normalized_url = f"{parsed_url.scheme}://{parsed_url.netloc}".lower()
+    normalized_url = f"{parsed_url.scheme}://{parsed_url.netloc}".lower().rstrip('/')
 
     conn = None
     try:
@@ -156,20 +152,19 @@ def add_url():
                 flash('Страница уже существует', 'info')
                 return redirect(url_for('url_detail', id=existing_url[0]))
 
-            # Вставка нового URL
             created_at = datetime.datetime.now()
             cur.execute(
                 "INSERT INTO urls (name, created_at) "
                 "VALUES (%s, %s) RETURNING id",
                 (normalized_url, created_at)
             )
-            url_id = cur.fetchone()[0]  # Получаем ID новой записи
+            url_id = cur.fetchone()[0]
             conn.commit()
 
             flash('Страница успешно добавлена',
                   'success')
             return redirect(url_for('url_detail',
-                                    id=url_id))  # Перенаправление
+                                    id=url_id))
 
     except psycopg2.Error as e:
         if conn:
@@ -199,7 +194,6 @@ def check_url(id):
         response = requests.get(url_name, timeout=5)
         status_code = response.status_code
 
-        # Парсим HTML (только если статус 200)
         h1 = ''
         title = ''
         description = ''
@@ -212,7 +206,6 @@ def check_url(id):
             description = meta_description['content'].strip() \
                 if meta_description else ''
 
-        # Сохраняем проверку
         with conn.cursor() as cur:
             cur.execute('''
                 INSERT INTO url_checks
@@ -227,9 +220,10 @@ def check_url(id):
                 created_at
             ))
             conn.commit()
-            flash('Проверка завершена', 'success')
+            flash('Страница успешно проверена', 'success')
 
-    except (psycopg2.Error, requests.RequestException, KeyError) as e:
+
+    except Exception as e:
         if conn:
             conn.rollback()
         flash('Произошла ошибка при проверке', 'danger')
